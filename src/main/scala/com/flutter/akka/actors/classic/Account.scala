@@ -18,5 +18,5 @@ class Account (accountNo: String) extends PersistentActor with ActorLogging {
 
   override def receiveCommand: Receive = ???
 
-  override def persistenceId: String = ???
+  override def persistenceId: String = s"classic-acc-$accountNo"
 }

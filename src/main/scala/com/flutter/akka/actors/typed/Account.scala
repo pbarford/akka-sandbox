@@ -31,7 +31,7 @@ object Account {
   def behavior(accountNo: String): Behavior[AccountCommand] = {
     Behaviors.setup { context =>
       EventSourcedBehavior[AccountCommand, AccountEvent, AccountState](
-        persistenceId = PersistenceId.ofUniqueId(accountNo),
+        persistenceId = PersistenceId.ofUniqueId(s"typed-account-$accountNo"),
         emptyState = AccountState(accountNo, 0.0, List.empty),
         commandHandler(context),
         eventHandler = (state, event) => {
