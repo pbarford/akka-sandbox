@@ -6,7 +6,7 @@ import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account.{AccountBalance, AccountCommand, AccountCredited, AccountDebited, AccountEvent, AccountState, Deposit, GetBalance, Withdraw, WithdrawalDeclined}
 
 object Account {
-  
+
   sealed trait AccountCommand
   case class Deposit(accountNo: String, amount: Double) extends AccountCommand
   case class Withdraw(accountNo: String, amount: Double) extends AccountCommand
