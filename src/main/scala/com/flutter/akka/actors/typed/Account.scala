@@ -27,7 +27,7 @@ object Account {
   private def commandHandler(context: ActorContext[AccountCommand]): CommandHandler[AccountCommand, AccountEvent, AccountState] = { (state, cmd) =>
     cmd match {
       case Deposit(no, amount, replyTo) =>
-        Effect.persist(AccountCredited(no, System.currentTimeMillis(), amount)).thenReply(replyTo)(state => state.transactions.head)
+        Effect.persist(AccountCredited(no, System.currentTimeMillis(), amount)).thenReply(replyTo)(updatedState => updatedState.transactions.head)
       case GetBalance(no, replyTo) =>
         Effect.reply(replyTo)(AccountBalance(no, System.currentTimeMillis(), state.balance) )
       case StopCommand(no) =>
