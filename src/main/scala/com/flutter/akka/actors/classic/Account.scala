@@ -65,8 +65,6 @@ class Account(accountNo: String) extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
     case cmd: AccountCommand => applyCommand.andThen(persistAndReply(sender()))(cmd)
   }
-
-
-
+  
   override def persistenceId: String = s"classic-acc-$accountNo"
 }
