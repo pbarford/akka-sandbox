@@ -22,6 +22,14 @@ class AccountSpec extends BaseActorSpec("AccountSpec") {
     val res2 = probe.expectMsgType[AccountBalance](3.seconds)
     res2.totalBalance should be (10)
 
+    actor.tell(Deposit(accNo, 12), probe.ref)
+    val res3 = probe.expectMsgType[AccountCredited](3.seconds)
+    res3.amount should be(12)
+
+    actor.tell(GetBalance(accNo), probe.ref)
+    val res4 = probe.expectMsgType[AccountBalance](3.seconds)
+    res4.totalBalance should be(22)
+
     probe.watch(actor)
     actor ! PoisonPill
     probe.expectTerminated(actor)
@@ -32,6 +40,6 @@ class AccountSpec extends BaseActorSpec("AccountSpec") {
     val actor = system.actorOf(Account.props(accNo))
     actor.tell(GetBalance(accNo), probe.ref)
     val res3 = probe.expectMsgType[AccountBalance](3.seconds)
-    res3.totalBalance should be(10)
+    res3.totalBalance should be(22)
   }
 }
