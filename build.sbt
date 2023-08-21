@@ -2,20 +2,36 @@ name := "akka-sandbox"
 
 version := "0.1"
 
-scalaVersion := "2.13.2"
+val scalaV:String = "2.13.2"
+scalaVersion := scalaV
 
-val akkaVersion = "2.8.2"
 
+val protobufJavaVersion = "3.21.6"
 
-libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-typed" % akkaVersion,
-  "com.typesafe.akka" %% "akka-cluster-sharding-typed" % akkaVersion,
-  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-  "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
-  "org.scalatest" %% "scalatest" % "3.1.1",
-  "com.typesafe.akka" %% "akka-actor-testkit-typed" % akkaVersion,
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.typelevel" %% "cats-core" % "2.1.1",
-  "org.typelevel" %% "cats-effect" % "2.1.3"
+ThisBuild / scalacOptions ++= Seq(
+  "-Ywarn-dead-code",
+  "-Ywarn-unused:imports,params,privates"
 )
+
+lazy val protosrc = (project in file("proto-src"))
+  .settings(
+    name := "akka-sandbox-proto",
+    scalaVersion := scalaV,
+    crossScalaVersions := List(scalaV),
+    unmanagedResourceDirectories in Compile += (sourceDirectory in ProtobufConfig).value,
+    libraryDependencies := Dependency.protobuf,
+    version in ProtobufConfig := protobufJavaVersion
+  )
+  .enablePlugins(ProtobufPlugin)
+
+lazy val root = (project in file("."))
+  .settings(
+    name := "akka-sandbox",
+    scalaVersion := scalaV,
+    crossScalaVersions := List(scalaV),
+    libraryDependencies := Dependency.rootDeps,
+    version in ProtobufConfig := protobufJavaVersion
+  )
+  .enablePlugins(ProtobufPlugin)
+  .dependsOn(protosrc)
+  .aggregate(protosrc)

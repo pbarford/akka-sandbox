@@ -1,0 +1,16 @@
+syntax = "proto3";
+package com.flutter.akka.proto;
+
+message Deposit {
+  string accountNo = 1;
+  double amount = 2;
+}
+
+message Withdraw {
+  string accountNo = 1;
+  double amount = 2;
+}
+
+message GetBalance {
+  string accountNo = 1;
+}
