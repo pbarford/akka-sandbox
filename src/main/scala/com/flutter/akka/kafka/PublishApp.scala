@@ -36,14 +36,6 @@ object PublishApp extends ZIOAppDefault {
       .retryUntil(!_.isInstanceOf[NumberFormatException])
       .refineToOrDie[IOException]
 
-  private def handleUnknownOption(): ZIO[Any, IOException, RuntimeFlags] = {
-    for {
-      _ <- Console.printLine("----------------------")
-      _ <- Console.printLine("Invalid Option")
-      _ <- Console.printLine("----------------------")
-    } yield 0
-  }
-
   private def handleDeposit()(implicit ec:ExecutionContext): ZIO[Any, Throwable, RuntimeFlags] = {
     for {
       _ <- Console.printLine("----------------------")
@@ -91,7 +83,6 @@ object PublishApp extends ZIOAppDefault {
       case 2 => handleWithdraw()
       case 3 => handleGetBalance()
       case 4 => handleExit()
-      case _ => handleUnknownOption()
     }
   }
 
