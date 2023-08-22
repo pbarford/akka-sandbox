@@ -1,19 +1,14 @@
-name := "akka-sandbox"
+import sbt._
 
-version := "0.1"
+ThisBuild / organization := "com.flutter"
+ThisBuild / scalacOptions ++= Compiler.scalacOptions
 
 val scalaV:String = "2.13.2"
 scalaVersion := scalaV
 
-
 val protobufJavaVersion = "3.21.6"
 
-ThisBuild / scalacOptions ++= Seq(
-  "-Ywarn-dead-code",
-  "-Ywarn-unused:imports,params,privates"
-)
-
-lazy val protosrc = (project in file("proto-src"))
+lazy val protoSrc = (project in file("proto-src"))
   .settings(
     name := "akka-sandbox-proto",
     scalaVersion := scalaV,
@@ -32,6 +27,5 @@ lazy val root = (project in file("."))
     libraryDependencies := Dependency.rootDeps,
     version in ProtobufConfig := protobufJavaVersion
   )
-  .enablePlugins(ProtobufPlugin)
-  .dependsOn(protosrc)
-  .aggregate(protosrc)
+  .dependsOn(protoSrc)
+  .aggregate(protoSrc)
