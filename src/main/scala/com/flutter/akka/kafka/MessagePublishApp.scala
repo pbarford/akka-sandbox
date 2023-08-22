@@ -1,12 +1,26 @@
 package com.flutter.akka.kafka
 import com.flutter.akka.proto.Messages
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord, RecordMetadata}
 import zio._
 import zio.{Scope, ZIO, ZIOAppArgs, ZIOAppDefault}
 
 import java.io.IOException
+import java.util.Properties
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
-object PublishApp extends ZIOAppDefault {
+object MessagePublishApp extends ZIOAppDefault {
+
+  private val props = new Properties()
+  props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
+  props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
+  props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
+  props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
+  private val producer = new KafkaProducer[String, Array[Byte]](props)
+
+  private def publish(key: String, value: Array[Byte])(implicit ec: ExecutionContext): Task[RecordMetadata] = {
+    val record = new ProducerRecord[String, Array[Byte]]("AccountTopic", key, value)
+    ZIO.fromFutureJava(producer.send(record))
+  }
 
   private def genGetBalanceProto(acc: String): Messages.AccountMessage = {
     val getBalance = com.flutter.akka.proto.Messages.GetBalance.newBuilder().build()
@@ -50,7 +64,7 @@ object PublishApp extends ZIOAppDefault {
       account <- Console.readLine("Account No. : ")
       amount <- readDouble("Amount : ")
       _ <- Console.printLine(s"Publishing Deposit Message for Account No. [$account], Amount [$amount]")
-      _ <- Producer.publish(account, genDepositProto(account, amount).toByteArray)
+      _ <- publish(account, genDepositProto(account, amount).toByteArray)
     } yield 0
   }
 
@@ -62,7 +76,7 @@ object PublishApp extends ZIOAppDefault {
       account <- Console.readLine("Account No. : ")
       amount <- readDouble("Amount : ")
       _ <- Console.printLine(s"Publishing Withdraw Message for Account No. [$account], Amount [$amount]")
-      _ <- Producer.publish(account, genWithdrawProto(account, amount).toByteArray)
+      _ <- publish(account, genWithdrawProto(account, amount).toByteArray)
     } yield 0
   }
 
@@ -73,7 +87,7 @@ object PublishApp extends ZIOAppDefault {
       _ <- Console.printLine("----------------------")
       account <- Console.readLine("Account No. : ")
       _ <- Console.printLine(s"Publishing Get Balance Message for Account No. [$account]")
-      _ <- Producer.publish(account, genGetBalanceProto(account).toByteArray)
+      _ <- publish(account, genGetBalanceProto(account).toByteArray)
     } yield 0
   }
 
