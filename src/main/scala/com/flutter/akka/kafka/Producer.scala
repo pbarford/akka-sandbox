@@ -1,13 +1,10 @@
 package com.flutter.akka.kafka
 
-import cats.effect.IO
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord, RecordMetadata}
-import zio.ZIO
+import zio.{Task, ZIO}
 
 import java.util.Properties
-import java.util.concurrent.Future
 import scala.concurrent.ExecutionContext
-import scala.jdk.FutureConverters._
 
 object Producer {
 
@@ -18,7 +15,7 @@ object Producer {
   props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
   private val producer = new KafkaProducer[String, Array[Byte]](props)
 
-  def publish(key:String, value:Array[Byte])(implicit ec:ExecutionContext) = {
+  def publish(key:String, value:Array[Byte])(implicit ec:ExecutionContext): Task[RecordMetadata] = {
     val record = new ProducerRecord[String, Array[Byte]]("AccountTopic", key, value)
     ZIO.fromFutureJava (producer.send(record))
   }
