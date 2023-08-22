@@ -34,7 +34,7 @@ object Account {
 
 class Account(accountNo: String) extends PersistentActor with ActorLogging {
 
-  private var state = AccountState(accountNo)
+  private var state: AccountState = AccountState(accountNo)
 
   private def applyCommand: AccountCommand => AccountEvent = {
     case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount)
