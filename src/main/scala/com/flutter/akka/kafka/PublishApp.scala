@@ -20,11 +20,19 @@ object PublishApp extends ZIOAppDefault {
     com.flutter.akka.proto.Messages.Withdraw.newBuilder().setAccountNo(acc).setAmount(amount).build()
   }
 
-  def parseInput(input: String): ZIO[Any, NumberFormatException, Double] =
+  private def parseInt(input: String): ZIO[Any, NumberFormatException, Int] =
+    ZIO.attempt(input.toInt).refineToOrDie[NumberFormatException]
+
+  private def parseDouble(input: String): ZIO[Any, NumberFormatException, Double] =
     ZIO.attempt(input.toDouble).refineToOrDie[NumberFormatException]
 
-  private def readDouble(msg: String): ZIO[Any, IOException, Double] =
-    (Console.print(msg) *> Console.readLine.flatMap(parseInput))
+  private def readInt(value: String): ZIO[Any, IOException, Int] =
+    (Console.print(value) *> Console.readLine.flatMap(parseInt))
+      .retryUntil(!_.isInstanceOf[NumberFormatException])
+      .refineToOrDie[IOException]
+
+  private def readDouble(value: String): ZIO[Any, IOException, Double] =
+    (Console.print(value) *> Console.readLine.flatMap(parseDouble))
       .retryUntil(!_.isInstanceOf[NumberFormatException])
       .refineToOrDie[IOException]
 
@@ -77,12 +85,12 @@ object PublishApp extends ZIOAppDefault {
     } yield -1
   }
 
-  private def handleOption(option:String)(implicit ec:ExecutionContext): ZIO[Any, Throwable, RuntimeFlags] = {
+  private def handleOption(option:Int)(implicit ec:ExecutionContext): ZIO[Any, Throwable, RuntimeFlags] = {
     option match {
-      case "1" => handleDeposit()
-      case "2" => handleWithdraw()
-      case "3" => handleGetBalance()
-      case "4" => handleExit()
+      case 1 => handleDeposit()
+      case 2 => handleWithdraw()
+      case 3 => handleGetBalance()
+      case 4 => handleExit()
       case _ => handleUnknownOption()
     }
   }
@@ -97,7 +105,7 @@ object PublishApp extends ZIOAppDefault {
       _ <- Console.printLine("3. Get Balance")
       _ <- Console.printLine("4. Exit")
       _ <- Console.printLine("----------------------")
-      option <- Console.readLine("Choose : ")
+      option <- readInt("Choose Option : ").repeatUntil(op => op > 0 && op <= 4)
       res <- handleOption(option)
     } yield  res
   }
