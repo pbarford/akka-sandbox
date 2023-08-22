@@ -1,16 +1,26 @@
 syntax = "proto3";
 package com.flutter.akka.proto;
 
-message Deposit {
+message AccountMessage {
   string accountNo = 1;
+  Payload payload = 2;
+}
+
+message Payload {
+  oneof payload {
+    Deposit deposit = 1;
+    Withdraw withdraw = 2;
+    GetBalance getBalance = 3;
+  }
+}
+
+message Deposit {
   double amount = 2;
 }
 
 message Withdraw {
-  string accountNo = 1;
   double amount = 2;
 }
 
 message GetBalance {
-  string accountNo = 1;
 }

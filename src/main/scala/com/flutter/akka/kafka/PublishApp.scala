@@ -8,16 +8,22 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 object PublishApp extends ZIOAppDefault {
 
-  private def genGetBalanceProto(acc: String): Messages.GetBalance = {
-    com.flutter.akka.proto.Messages.GetBalance.newBuilder().setAccountNo(acc).build()
+  private def genGetBalanceProto(acc: String): Messages.AccountMessage = {
+    val getBalance = com.flutter.akka.proto.Messages.GetBalance.newBuilder().build()
+    val payload = com.flutter.akka.proto.Messages.Payload.newBuilder().setGetBalance(getBalance).build()
+    com.flutter.akka.proto.Messages.AccountMessage.newBuilder().setAccountNo(acc).setPayload(payload).build()
   }
 
-  private def genDepositProto(acc: String, amount: Double): Messages.Deposit = {
-    com.flutter.akka.proto.Messages.Deposit.newBuilder().setAccountNo(acc).setAmount(amount).build()
+  private def genDepositProto(acc: String, amount: Double): Messages.AccountMessage = {
+    val deposit = com.flutter.akka.proto.Messages.Deposit.newBuilder().setAmount(amount).build()
+    val payload = com.flutter.akka.proto.Messages.Payload.newBuilder().setDeposit(deposit).build()
+    com.flutter.akka.proto.Messages.AccountMessage.newBuilder().setAccountNo(acc).setPayload(payload).build()
   }
 
-  private def genWithdrawProto(acc: String, amount: Double): Messages.Withdraw = {
-    com.flutter.akka.proto.Messages.Withdraw.newBuilder().setAccountNo(acc).setAmount(amount).build()
+  private def genWithdrawProto(acc: String, amount: Double): Messages.AccountMessage = {
+    val withdraw = com.flutter.akka.proto.Messages.Withdraw.newBuilder().setAmount(amount).build()
+    val payload = com.flutter.akka.proto.Messages.Payload.newBuilder().setWithdraw(withdraw).build()
+    com.flutter.akka.proto.Messages.AccountMessage.newBuilder().setAccountNo(acc).setPayload(payload).build()
   }
 
   private def parseInt(input: String): ZIO[Any, NumberFormatException, Int] =
