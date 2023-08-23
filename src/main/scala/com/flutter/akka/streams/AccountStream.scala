@@ -67,11 +67,9 @@ object AccountStream extends App {
     Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       .flatMapMerge(5, _._2)
       .map(m => parseConsumerRecord(m))
-      .map { m => println(m)
-        m
-      }
+      .wireTap(m => println(m))
       .ask[AccountEvent](parallelism = 5)(accountRegion)
-      .map(println)
+      .wireTap(m => println(m))
       .toMat(Sink.ignore)(Keep.both)
   }
 
