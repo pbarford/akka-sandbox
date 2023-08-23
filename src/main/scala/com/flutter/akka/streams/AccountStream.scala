@@ -1,6 +1,6 @@
 package com.flutter.akka.streams
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
@@ -13,14 +13,13 @@ import akka.util.Timeout
 import com.flutter.akka.actors.classic.Account
 import com.flutter.akka.actors.classic.Account.{AccountCommand, AccountEvent, Deposit, GetBalance, Withdraw}
 import com.flutter.akka.proto.Messages.AccountMessage
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object AccountStream extends App {
-
-  case class InMessage(command:AccountCommand)
 
   private implicit val system: ActorSystem = ActorSystem.create("AccountStream")
 
@@ -52,19 +51,16 @@ object AccountStream extends App {
       }
   }
 
-  private def parseConsumerRecord : ConsumerRecord[String, Array[Byte]] => InMessage = {
-    cr =>
-      val accountMessage = com.flutter.akka.proto.Messages.AccountMessage.parseFrom(cr.value())
-      InMessage(parseAccountMessage(accountMessage))
+  private def parseBytes : Array[Byte] => AccountMessage = { bytes =>
+    com.flutter.akka.proto.Messages.AccountMessage.parseFrom(bytes)
   }
 
-  def parseCommittableMessage : CommittableMessage[String, Array[Byte]] => InMessage = {
-    cm =>
-      val accountMessage = com.flutter.akka.proto.Messages.AccountMessage.parseFrom(cm.record.value())
-      InMessage(parseAccountMessage(accountMessage))
+  private def parseKafkaRecord : Array[Byte] => AccountCommand = {
+    bytes =>
+      parseAccountMessage(parseBytes(bytes))
   }
 
-  private def stream2 = RunnableGraph.fromGraph(GraphDSL.create() {
+  private def streamWithCommit: RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
       implicit val askTimeout: Timeout = 5.seconds
@@ -73,10 +69,12 @@ object AccountStream extends App {
       val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
       val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
 
-      val businessLogic = Flow[CommittableMessage[String, Array[Byte]]]
-        .mapAsync(1)(message => ask(accountRegion, parseCommittableMessage(message))).wireTap(ev => println(ev))
+      val businessLogic: Flow[CommittableMessage[String, Array[Byte]], Any, NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
+        .mapAsync(1)(message => ask(accountRegion, parseKafkaRecord(message.record.value())))
+        .wireTap(ev => println(ev))
 
-      val snk = Flow[CommittableMessage[String, Array[Byte]]].mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
+      val snk = Flow[CommittableMessage[String, Array[Byte]]]
+        .mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
 
       src ~> broadcast
              broadcast ~> businessLogic ~> zip.in0
@@ -85,18 +83,18 @@ object AccountStream extends App {
       ClosedShape
   })
 
-  private def stream = {
+  private def streamNoCommit: RunnableGraph[(Consumer.Control, Future[Done])] = {
 
     implicit val askTimeout: Timeout = 5.seconds
 
     Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       .flatMapMerge(5, _._2)
-      .map(m => parseConsumerRecord(m))
+      .map(m => parseKafkaRecord(m.value()))
       .wireTap(m => println(m))
       .ask[AccountEvent](parallelism = 5)(accountRegion)
       .wireTap(m => println(m))
       .toMat(Sink.ignore)(Keep.both)
   }
 
-  stream2.run()
+  streamWithCommit.run()
 }
