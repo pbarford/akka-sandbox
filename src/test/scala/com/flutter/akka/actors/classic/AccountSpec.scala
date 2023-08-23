@@ -11,7 +11,7 @@ class AccountSpec extends BaseActorSpec("AccountSpec") {
 
   it should "handle account commands" in {
 
-    val actor = system.actorOf(Account.props(accNo))
+    val actor = system.actorOf(Account.props(), accNo)
     val probe = TestProbe()
 
     actor.tell(Deposit(accNo, 10), probe.ref)
@@ -38,7 +38,7 @@ class AccountSpec extends BaseActorSpec("AccountSpec") {
 
   it should "handle actor recovery" in {
     val probe = TestProbe()
-    val actor = system.actorOf(Account.props(accNo))
+    val actor = system.actorOf(Account.props(), accNo)
     actor.tell(GetBalance(accNo), probe.ref)
     val res1 = probe.expectMsgType[AccountBalance](3.seconds)
     res1.totalBalance should be(22)
@@ -51,7 +51,7 @@ class AccountSpec extends BaseActorSpec("AccountSpec") {
 
   it should "handle withdrawals" in {
     val probe = TestProbe()
-    val actor = system.actorOf(Account.props(accNo))
+    val actor = system.actorOf(Account.props(), accNo)
     actor.tell(GetBalance(accNo), probe.ref)
     val res1 = probe.expectMsgType[AccountBalance](3.seconds)
     res1.totalBalance should be(22)

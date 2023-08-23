@@ -111,14 +111,14 @@ object MessagePublishApp extends ZIOAppDefault {
 
   private def program()(implicit ec:ExecutionContext): ZIO[Any, Throwable, RuntimeFlags] = {
     for {
-      _ <- Console.printLine("----------------------")
-      _ <- Console.printLine("Select Message to Send")
-      _ <- Console.printLine("----------------------")
-      _ <- Console.printLine("1. Deposit")
-      _ <- Console.printLine("2. Withdraw")
-      _ <- Console.printLine("3. Get Balance")
-      _ <- Console.printLine("4. Exit")
-      _ <- Console.printLine("----------------------")
+      _ <- Console.printLine("--------------------------")
+      _ <- Console.printLine("| Select Message to Send |")
+      _ <- Console.printLine("--------------------------")
+      _ <- Console.printLine("| 1. Deposit             |")
+      _ <- Console.printLine("| 2. Withdraw            |")
+      _ <- Console.printLine("| 3. Get Balance         |")
+      _ <- Console.printLine("| 4. Exit                |")
+      _ <- Console.printLine("--------------------------")
       option <- readInt("Choose Option : ").repeatUntil(op => op > 0 && op <= 4)
       res <- handleOption(option)
     } yield  res

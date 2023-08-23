@@ -1,18 +1,27 @@
 package com.flutter.akka.actors.classic
 
-import akka.actor.{ActorLogging, ActorRef, Props, Terminated}
+import akka.actor.{ActorLogging, ActorRef, Props}
+import akka.cluster.sharding.ShardRegion
 import akka.persistence.PersistentActor
 import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account.{AccountBalance, AccountCommand, AccountCredited, AccountDebited, AccountEvent, AccountState, Deposit, GetBalance, Withdraw, WithdrawalDeclined}
+import com.flutter.akka.streams.AccountStream.InMessage
 
 object Account {
 
-  sealed trait AccountCommand
+  sealed trait AccountCommand {
+    def accountNo:String
+  }
+
   case class Deposit(accountNo: String, amount: Double) extends AccountCommand
   case class Withdraw(accountNo: String, amount: Double) extends AccountCommand
   case class GetBalance(accountNo: String) extends AccountCommand
 
-  sealed trait AccountEvent
+  sealed trait AccountEvent {
+    def accountNo:String
+    def timestamp:Long
+  }
+
   case class AccountCredited(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
   case class AccountDebited(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
   case class WithdrawalDeclined(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
@@ -27,12 +36,31 @@ object Account {
     }
   }
 
-  def props(accountNo: String): Props = {
-    Props(new Account(accountNo))
+  val extractEntityId: ShardRegion.ExtractEntityId = {
+    case InMessage(command:AccountCommand, _) => (command.accountNo, command)
+    case msg@Deposit(id, _) => (id, msg)
+    case msg@Withdraw(id, _) => (id, msg)
+    case msg@GetBalance(id) => (id, msg)
+  }
+  val numberOfShards = 100
+
+  val extractShardId: ShardRegion.ExtractShardId = {
+    case InMessage(command:AccountCommand, _) => (command.accountNo.hashCode % numberOfShards).toString
+    case Deposit(id, _) => (id.hashCode % numberOfShards).toString
+    case Withdraw(id, _) => (id.hashCode % numberOfShards).toString
+    case GetBalance(id) => (id.hashCode % numberOfShards).toString
+    case ShardRegion.StartEntity(id) => (id.toLong % numberOfShards).toString
+    case _ => throw new IllegalArgumentException()
+  }
+
+  def props(): Props = {
+    Props(new Account())
   }
 }
 
-class Account(accountNo: String) extends PersistentActor with ActorLogging {
+class Account() extends PersistentActor with ActorLogging {
+
+  private def accountNo: String = self.path.name
 
   private var state: AccountState = AccountState(accountNo)
 

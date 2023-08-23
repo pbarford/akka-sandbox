@@ -1,14 +1,19 @@
 package com.flutter.akka.streams
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.scaladsl.{Keep, Sink}
-import com.flutter.akka.actors.classic.Account.{AccountCommand, Deposit, GetBalance, Withdraw}
+import akka.util.Timeout
+import com.flutter.akka.actors.classic.Account
+import com.flutter.akka.actors.classic.Account.{AccountCommand, AccountEvent, Deposit, GetBalance, Withdraw}
 import com.flutter.akka.proto.Messages.AccountMessage
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
+
+import scala.concurrent.duration._
 
 object AccountStream extends App {
 
@@ -16,6 +21,14 @@ object AccountStream extends App {
 
   implicit val system = ActorSystem.create("AccountStream")
   implicit val ec = system.dispatcher
+  implicit val askTimeout: Timeout = 5.seconds
+  val accountRegion: ActorRef = ClusterSharding (system).start(
+    typeName = "Account",
+    entityProps = Account.props(),
+    settings = ClusterShardingSettings(system),
+    extractEntityId = Account.extractEntityId,
+    extractShardId = Account.extractShardId)
+
   val kafkaServers = "kafka:9092"
   val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
 
@@ -54,7 +67,12 @@ object AccountStream extends App {
 
     Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       .flatMapMerge(5, _._2)
-      .map(m => parseConsumerRecord(m)).map(println(_))
+      .map(m => parseConsumerRecord(m))
+      .map { m => println(m)
+        m
+      }
+      .ask[AccountEvent](parallelism = 5)(accountRegion)
+      .map(println)
       .toMat(Sink.ignore)(Keep.both)
   }
 
