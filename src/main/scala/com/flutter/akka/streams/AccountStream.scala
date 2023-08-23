@@ -19,19 +19,18 @@ object AccountStream extends App {
 
   case class InMessage(command:AccountCommand, committableMessage: Option[CommittableMessage[String, Array[Byte]]] = None)
 
-  implicit val system = ActorSystem.create("AccountStream")
-  implicit val ec = system.dispatcher
-  implicit val askTimeout: Timeout = 5.seconds
-  val accountRegion: ActorRef = ClusterSharding (system).start(typeName = "Account",
+  private implicit val system: ActorSystem = ActorSystem.create("AccountStream")
+
+  private val accountRegion: ActorRef = ClusterSharding (system).start(typeName = "Account",
                                                               entityProps = Account.props(),
                                                               settings = ClusterShardingSettings(system),
                                                               extractEntityId = Account.extractEntityId,
                                                               extractShardId = Account.extractShardId)
 
-  val kafkaServers = "kafka:9092"
-  val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
+  private val kafkaServers = "kafka:9092"
+  private val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
 
-  val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
+  private val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
     .withBootstrapServers(kafkaServers)
     .withGroupId("akkaSandbox")
     .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -41,7 +40,7 @@ object AccountStream extends App {
     //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
 
-  def parseAccountMessage : AccountMessage => AccountCommand = {
+  private def parseAccountMessage : AccountMessage => AccountCommand = {
     am =>
       am.getPayload.getPayloadCase.getNumber match {
         case 1 => Deposit(am.getAccountNo, am.getPayload.getDeposit.getAmount)
@@ -50,7 +49,7 @@ object AccountStream extends App {
       }
   }
 
-  def parseConsumerRecord : ConsumerRecord[String, Array[Byte]] => InMessage = {
+  private def parseConsumerRecord : ConsumerRecord[String, Array[Byte]] => InMessage = {
     cr =>
       val accountMessage = com.flutter.akka.proto.Messages.AccountMessage.parseFrom(cr.value())
       InMessage(parseAccountMessage(accountMessage))
@@ -62,7 +61,9 @@ object AccountStream extends App {
       InMessage(parseAccountMessage(accountMessage), Some(cm))
   }
 
-  def stream = {
+  private def stream = {
+
+    implicit val askTimeout: Timeout = 5.seconds
 
     Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       .flatMapMerge(5, _._2)
