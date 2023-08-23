@@ -76,9 +76,6 @@ object AccountStream extends App {
 
       val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
 
-      //val sink: Sink[CommittableMessage[String, Array[Byte]], NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
-      //  .mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
-
       src ~> broadcast
              broadcast ~> businessLogic ~> zip.in0
              broadcast ~> zip.in1
