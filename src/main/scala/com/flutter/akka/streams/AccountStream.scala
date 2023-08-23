@@ -32,15 +32,6 @@ object AccountStream extends App {
   private val kafkaServers = "kafka:9092"
   private val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
 
-  private val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
-    .withBootstrapServers(kafkaServers)
-    .withGroupId("akkaSandbox")
-    .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-    .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
-    .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
-    .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-    //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
-
 
   private def parseAccountMessage : AccountMessage => AccountCommand = {
     am =>
@@ -65,6 +56,15 @@ object AccountStream extends App {
       import GraphDSL.Implicits._
       implicit val askTimeout: Timeout = 5.seconds
 
+      val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
+        .withBootstrapServers(kafkaServers)
+        .withGroupId("akkaSandboxCommit")
+        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+        .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
+        .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+      //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
+
       val src = Consumer.committableSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
       val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
@@ -86,6 +86,15 @@ object AccountStream extends App {
   private def streamNoCommit: RunnableGraph[(Consumer.Control, Future[Done])] = {
 
     implicit val askTimeout: Timeout = 5.seconds
+
+    val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
+      .withBootstrapServers(kafkaServers)
+      .withGroupId("akkaSandboxNoCommit")
+      .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+      .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
+      .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
+      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
     Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
       .flatMapMerge(5, _._2)
