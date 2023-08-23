@@ -1,11 +1,14 @@
 package com.flutter.akka.streams
 
+import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.pattern.ask
+import akka.stream.ClosedShape
+import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
 import akka.util.Timeout
 import com.flutter.akka.actors.classic.Account
 import com.flutter.akka.actors.classic.Account.{AccountCommand, AccountEvent, Deposit, GetBalance, Withdraw}
@@ -17,7 +20,7 @@ import scala.concurrent.duration._
 
 object AccountStream extends App {
 
-  case class InMessage(command:AccountCommand, committableMessage: Option[CommittableMessage[String, Array[Byte]]] = None)
+  case class InMessage(command:AccountCommand)
 
   private implicit val system: ActorSystem = ActorSystem.create("AccountStream")
 
@@ -58,8 +61,29 @@ object AccountStream extends App {
   def parseCommittableMessage : CommittableMessage[String, Array[Byte]] => InMessage = {
     cm =>
       val accountMessage = com.flutter.akka.proto.Messages.AccountMessage.parseFrom(cm.record.value())
-      InMessage(parseAccountMessage(accountMessage), Some(cm))
+      InMessage(parseAccountMessage(accountMessage))
   }
+
+  private def stream2 = RunnableGraph.fromGraph(GraphDSL.create() {
+    implicit builder: GraphDSL.Builder[NotUsed] =>
+      import GraphDSL.Implicits._
+      implicit val askTimeout: Timeout = 5.seconds
+
+      val src = Consumer.committableSource(consumerSettings, Subscriptions.topics("AccountTopic"))
+      val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
+      val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
+
+      val businessLogic = Flow[CommittableMessage[String, Array[Byte]]]
+        .mapAsync(1)(message => ask(accountRegion, parseCommittableMessage(message))).wireTap(ev => println(ev))
+
+      val snk = Flow[CommittableMessage[String, Array[Byte]]].mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
+
+      src ~> broadcast
+             broadcast ~> businessLogic ~> zip.in0
+             broadcast ~> zip.in1
+                          zip.out.map(_._2) ~> snk
+      ClosedShape
+  })
 
   private def stream = {
 
@@ -74,5 +98,5 @@ object AccountStream extends App {
       .toMat(Sink.ignore)(Keep.both)
   }
 
-  stream.run()
+  stream2.run()
 }

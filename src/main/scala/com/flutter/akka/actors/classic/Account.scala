@@ -37,7 +37,7 @@ object Account {
   }
 
   val extractEntityId: ShardRegion.ExtractEntityId = {
-    case InMessage(command:AccountCommand, _) => (command.accountNo, command)
+    case InMessage(command:AccountCommand) => (command.accountNo, command)
     case msg@Deposit(id, _) => (id, msg)
     case msg@Withdraw(id, _) => (id, msg)
     case msg@GetBalance(id) => (id, msg)
@@ -45,7 +45,7 @@ object Account {
   val numberOfShards = 100
 
   val extractShardId: ShardRegion.ExtractShardId = {
-    case InMessage(command:AccountCommand, _) => (command.accountNo.hashCode % numberOfShards).toString
+    case InMessage(command:AccountCommand) => (command.accountNo.hashCode % numberOfShards).toString
     case Deposit(id, _) => (id.hashCode % numberOfShards).toString
     case Withdraw(id, _) => (id.hashCode % numberOfShards).toString
     case GetBalance(id) => (id.hashCode % numberOfShards).toString
