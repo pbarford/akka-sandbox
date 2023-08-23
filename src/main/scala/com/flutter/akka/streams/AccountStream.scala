@@ -4,8 +4,9 @@ import akka.{Done, NotUsed}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
-import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.kafka.scaladsl.Consumer.DrainingControl
+import akka.kafka.scaladsl.{Committer, Consumer}
+import akka.kafka.{CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.pattern.ask
 import akka.stream.ClosedShape
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
@@ -31,7 +32,7 @@ object AccountStream extends App {
 
   private val kafkaServers = "kafka:9092"
   private val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
-
+  val committerSettings = CommitterSettings(system)
 
   private def parseAccountMessage : AccountMessage => AccountCommand = {
     am =>
@@ -73,13 +74,15 @@ object AccountStream extends App {
         .mapAsync(1)(message => ask(accountRegion, parseKafkaRecord(message.record.value())))
         .wireTap(ev => println(ev))
 
-      val snk = Flow[CommittableMessage[String, Array[Byte]]]
-        .mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
+      val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
+
+      //val sink: Sink[CommittableMessage[String, Array[Byte]], NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
+      //  .mapAsync(1)(message => message.committableOffset.commitScaladsl()).to(Sink.ignore)
 
       src ~> broadcast
              broadcast ~> businessLogic ~> zip.in0
              broadcast ~> zip.in1
-                          zip.out.map(_._2) ~> snk
+                          zip.out.map(_._2.committableOffset) ~> sink
       ClosedShape
   })
 
