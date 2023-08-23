@@ -1,6 +1,6 @@
 package com.flutter.akka.streams
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
@@ -22,12 +22,11 @@ object AccountStream extends App {
   implicit val system = ActorSystem.create("AccountStream")
   implicit val ec = system.dispatcher
   implicit val askTimeout: Timeout = 5.seconds
-  val accountRegion: ActorRef = ClusterSharding (system).start(
-    typeName = "Account",
-    entityProps = Account.props(),
-    settings = ClusterShardingSettings(system),
-    extractEntityId = Account.extractEntityId,
-    extractShardId = Account.extractShardId)
+  val accountRegion: ActorRef = ClusterSharding (system).start(typeName = "Account",
+                                                              entityProps = Account.props(),
+                                                              settings = ClusterShardingSettings(system),
+                                                              extractEntityId = Account.extractEntityId,
+                                                              extractShardId = Account.extractShardId)
 
   val kafkaServers = "kafka:9092"
   val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
