@@ -20,6 +20,7 @@ object Dependency {
     "com.typesafe.akka" %% "akka-stream" % akkaVersion,
     "com.typesafe.akka" %% "akka-stream-kafka" % "4.0.2",
     "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "org.scalatest" %% "scalatest" % "3.1.1",
     "com.typesafe.akka" %% "akka-actor-testkit-typed" % akkaVersion,
     "ch.qos.logback" % "logback-classic" % "1.2.3",

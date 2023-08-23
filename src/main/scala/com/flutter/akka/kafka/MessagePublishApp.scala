@@ -14,7 +14,7 @@ object MessagePublishApp extends ZIOAppDefault {
   props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
   props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
   props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
-  props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
+  //props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
   private val producer = new KafkaProducer[String, Array[Byte]](props)
 
   private def publish(key: String, value: Array[Byte])(implicit ec: ExecutionContext): Task[RecordMetadata] = {
@@ -64,7 +64,8 @@ object MessagePublishApp extends ZIOAppDefault {
       account <- Console.readLine("Account No. : ")
       amount <- readDouble("Amount : ")
       _ <- Console.printLine(s"Publishing Deposit Message for Account No. [$account], Amount [$amount]")
-      _ <- publish(account, genDepositProto(account, amount).toByteArray)
+      meta <- publish(account, genDepositProto(account, amount).toByteArray)
+      _ <- Console.printLine(s"Published --> topic [${meta.topic()}], offset [${meta.offset()}], partition [${meta.partition()}]")
     } yield 0
   }
 
@@ -76,7 +77,8 @@ object MessagePublishApp extends ZIOAppDefault {
       account <- Console.readLine("Account No. : ")
       amount <- readDouble("Amount : ")
       _ <- Console.printLine(s"Publishing Withdraw Message for Account No. [$account], Amount [$amount]")
-      _ <- publish(account, genWithdrawProto(account, amount).toByteArray)
+      meta <- publish(account, genWithdrawProto(account, amount).toByteArray)
+      _ <- Console.printLine(s"Published --> topic [${meta.topic()}], offset [${meta.offset()}], partition [${meta.partition()}]")
     } yield 0
   }
 
@@ -87,7 +89,8 @@ object MessagePublishApp extends ZIOAppDefault {
       _ <- Console.printLine("----------------------")
       account <- Console.readLine("Account No. : ")
       _ <- Console.printLine(s"Publishing Get Balance Message for Account No. [$account]")
-      _ <- publish(account, genGetBalanceProto(account).toByteArray)
+      meta <- publish(account, genGetBalanceProto(account).toByteArray)
+      _ <- Console.printLine(s"Published --> topic [${meta.topic()}], offset [${meta.offset()}], partition [${meta.partition()}]")
     } yield 0
   }
 
