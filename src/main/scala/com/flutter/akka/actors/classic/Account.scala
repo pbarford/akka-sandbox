@@ -41,14 +41,13 @@ object Account {
     case msg@GetBalance(id) => (id, msg)
   }
 
-
-  /*
-  https://doc.akka.io/docs/akka/current/cluster-sharding.html
-
-   As a rule of thumb, the number of shards should be a factor ten greater than the planned maximum number of cluster nodes
-
-   IMPORTANT : The sharding algorithm must be the same on all nodes in a running cluster. It can be changed after stopping all nodes in the cluster.
-   */
+  /**
+    * "https://doc.akka.io/docs/akka/current/cluster-sharding.html"
+    *
+    * As a rule of thumb, the number of shards should be a factor ten greater than the planned maximum number of cluster nodes
+    *
+    * IMPORTANT : The sharding algorithm must be the same on all nodes in a running cluster. It can be changed after stopping all nodes in the cluster.
+    */
 
   val numberOfShards = 20
 
