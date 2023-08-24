@@ -4,10 +4,11 @@ import akka.{Done, NotUsed}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
+import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
 import akka.kafka.{CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.pattern.ask
-import akka.stream.ClosedShape
+import akka.stream.{ClosedShape, FlowShape}
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
 import akka.util.Timeout
 import com.flutter.akka.actors.classic.Account
@@ -20,6 +21,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object AccountStream extends App {
+
+  private val kafkaTopic = "PartitionedTopic"
 
   private implicit val system: ActorSystem = ActorSystem.create("AccountStream")
 
@@ -51,6 +54,45 @@ object AccountStream extends App {
       parseAccountMessage(parseBytes(bytes))
   }
 
+  private def mainLogic(): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
+    implicit builder: GraphDSL.Builder[NotUsed] =>
+      import GraphDSL.Implicits._
+      implicit val askTimeout: Timeout = 5.seconds
+
+      val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
+      val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
+      val businessLogic: Flow[CommittableMessage[String, Array[Byte]], Any, NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
+        .mapAsync(1)(message => ask(accountRegion, parseKafkaRecord(message.record.value())))
+        .wireTap(ev => println(ev))
+
+      broadcast ~> businessLogic ~> zip.in0
+      broadcast ~> zip.in1
+
+      FlowShape(broadcast.in, zip.out)
+  })
+
+  private def partitionedStreamWithCommit = {
+      implicit val askTimeout: Timeout = 5.seconds
+
+      val partitions = 5
+      val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
+        .withBootstrapServers(kafkaServers)
+        .withGroupId("akkaSandboxCommit")
+        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+        .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
+        .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+        .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
+
+      val src = Consumer.committablePartitionedSource(consumerSettings, Subscriptions.topics(kafkaTopic))
+
+      src.mapAsyncUnordered(partitions) {
+        case (partition, source) =>
+            println(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
+            source.via(mainLogic()).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
+      }.toMat(Sink.ignore)(DrainingControl.apply)
+  }
+
   private def streamWithCommit: RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
@@ -63,22 +105,12 @@ object AccountStream extends App {
         .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
         .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-      //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
+        .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
-      val src = Consumer.committableSource(consumerSettings, Subscriptions.topics("AccountTopic"))
-      val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
-      val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
-
-      val businessLogic: Flow[CommittableMessage[String, Array[Byte]], Any, NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
-        .mapAsync(1)(message => ask(accountRegion, parseKafkaRecord(message.record.value())))
-        .wireTap(ev => println(ev))
-
+      val src = Consumer.committableSource(consumerSettings, Subscriptions.topics(kafkaTopic))
       val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
 
-      src ~> broadcast
-             broadcast ~> businessLogic ~> zip.in0
-             broadcast ~> zip.in1
-                          zip.out.map(_._2.committableOffset) ~> sink
+        src ~> mainLogic().map(_._2.committableOffset) ~> sink
       ClosedShape
   })
 
@@ -93,9 +125,9 @@ object AccountStream extends App {
       .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
       .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-    //.withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
+      .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
-    Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics("AccountTopic"))
+    Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics(kafkaTopic))
       .flatMapMerge(5, _._2)
       .map(m => parseKafkaRecord(m.value()))
       .wireTap(m => println(m))
@@ -104,5 +136,5 @@ object AccountStream extends App {
       .toMat(Sink.ignore)(Keep.both)
   }
 
-  streamWithCommit.run()
+  partitionedStreamWithCommit.run()
 }

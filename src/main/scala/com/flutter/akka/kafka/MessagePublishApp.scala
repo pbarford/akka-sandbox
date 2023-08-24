@@ -10,15 +10,19 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 object MessagePublishApp extends ZIOAppDefault {
 
+  //val kafkaTopic = "AccountTopic"
+  val kafkaTopic = "PartitionedTopic"
+
   private val props = new Properties()
   props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
   props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
   props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
-  //props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
+  props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.flutter.akka.kafka.KeyPartitioner")
+
   private val producer = new KafkaProducer[String, Array[Byte]](props)
 
   private def publish(key: String, value: Array[Byte])(implicit ec: ExecutionContext): Task[RecordMetadata] = {
-    val record = new ProducerRecord[String, Array[Byte]]("AccountTopic", key, value)
+    val record = new ProducerRecord[String, Array[Byte]](kafkaTopic, key, value)
     ZIO.fromFutureJava(producer.send(record))
   }
 
