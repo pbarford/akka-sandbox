@@ -72,7 +72,6 @@ object AccountStream extends App {
   })
 
   private def partitionedStreamWithCommit = {
-      implicit val askTimeout: Timeout = 5.seconds
 
       val partitions = 5
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
@@ -96,7 +95,6 @@ object AccountStream extends App {
   private def streamWithCommit: RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
-      implicit val askTimeout: Timeout = 5.seconds
 
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
