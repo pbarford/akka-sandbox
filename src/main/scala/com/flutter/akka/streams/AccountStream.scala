@@ -4,7 +4,6 @@ import akka.{Done, NotUsed}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
-import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
 import akka.kafka.{CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.pattern.ask
