@@ -62,8 +62,11 @@ object AccountStream extends App {
       val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
       val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
       val businessLogic: Flow[CommittableMessage[String, Array[Byte]], Any, NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
-        .mapAsync(1)(message => ask(accountRegion, parseKafkaRecord(message.record.value())))
-        .wireTap(ev => println(ev))
+        .wireTap(m => println(s"message received in partition [${m.record.partition()}]"))
+        .map(message => parseKafkaRecord(message.record.value()))
+        .wireTap(m => println(s"message process --> command [$m]"))
+        .mapAsync(1)(command => ask(accountRegion, command))
+        .wireTap(ev => println(s"message process --> event [$ev]"))
 
       broadcast ~> businessLogic ~> zip.in0
       broadcast ~> zip.in1
@@ -76,7 +79,7 @@ object AccountStream extends App {
       val partitions = 5
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
-        .withGroupId("akkaSandboxCommit")
+        .withGroupId("akkaSandboxCommitMultiSource")
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
         .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
@@ -98,7 +101,7 @@ object AccountStream extends App {
 
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
-        .withGroupId("akkaSandboxCommit")
+        .withGroupId("akkaSandboxCommitSingleSource")
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
         .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
@@ -109,6 +112,7 @@ object AccountStream extends App {
       val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
 
         src ~> mainLogic().map(_._2.committableOffset) ~> sink
+
       ClosedShape
   })
 
@@ -125,12 +129,12 @@ object AccountStream extends App {
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
       .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
-    Consumer.plainPartitionedSource(consumerSettings, Subscriptions.topics(kafkaTopic))
-      .flatMapMerge(5, _._2)
+    Consumer.plainSource(consumerSettings, Subscriptions.topics(kafkaTopic))
+      .wireTap(m => println(s"message received in partition [${m.partition()}]"))
       .map(m => parseKafkaRecord(m.value()))
-      .wireTap(m => println(m))
-      .ask[AccountEvent](parallelism = 5)(accountRegion)
-      .wireTap(m => println(m))
+      .wireTap(m => println(s"message process --> command [$m]"))
+      .ask[AccountEvent](parallelism = 1)(accountRegion)
+      .wireTap(m => println(s"message process --> event [$m]"))
       .toMat(Sink.ignore)(Keep.both)
   }
 

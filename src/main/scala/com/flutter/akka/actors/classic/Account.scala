@@ -55,7 +55,7 @@ object Account {
     case Deposit(id, _) => (id.hashCode % numberOfShards).toString
     case Withdraw(id, _) => (id.hashCode % numberOfShards).toString
     case GetBalance(id) => (id.hashCode % numberOfShards).toString
-    case ShardRegion.StartEntity(id) => (id.toLong % numberOfShards).toString
+    case ShardRegion.StartEntity(id) => (id.hashCode % numberOfShards).toString
     case _ => throw new IllegalArgumentException()
   }
 
@@ -76,7 +76,6 @@ class Account() extends PersistentActor with ActorLogging {
     case Withdraw(_, amount) if amount > state.balance => WithdrawalDeclined(accountNo, System.currentTimeMillis(), amount)
     case Withdraw(_, amount) if amount <= state.balance => AccountDebited(accountNo, System.currentTimeMillis(), amount)
   }
-
 
   private def applyEventToState: AccountEvent => AccountEvent = { ev =>
     state = state.apply(ev)
