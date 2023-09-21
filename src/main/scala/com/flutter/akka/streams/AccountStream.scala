@@ -1,40 +1,31 @@
 package com.flutter.akka.streams
 
-import akka.{Done, NotUsed}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.singleton.{ClusterSingletonProxy, ClusterSingletonProxySettings}
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
 import akka.kafka.{CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
-import akka.pattern.ask
-import akka.stream.{ClosedShape, FlowShape}
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
+import akka.stream.{ClosedShape, FlowShape}
 import akka.util.Timeout
+import akka.{Done, NotUsed}
 import com.flutter.akka.actors.classic.Account
-import com.flutter.akka.actors.classic.Account.{AccountCommand, AccountEvent, Deposit, GetBalance, Withdraw}
+import com.flutter.akka.actors.classic.Account._
+import com.flutter.akka.actors.classic.Publisher.{Publish, Published}
 import com.flutter.akka.proto.Messages.AccountMessage
+import com.typesafe.config.Config
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-object AccountStream extends App {
+object AccountStream {
 
   private val kafkaTopic = "PartitionedTopic"
-
-  private implicit val system: ActorSystem = ActorSystem.create("AccountStream")
-
-  private val accountRegion: ActorRef = ClusterSharding (system).start(typeName = "Account",
-                                                              entityProps = Account.props(),
-                                                              settings = ClusterShardingSettings(system),
-                                                              extractEntityId = Account.extractEntityId,
-                                                              extractShardId = Account.extractShardId)
-
   private val kafkaServers = "kafka:9092"
-  private val consumerConfig = system.settings.config.getConfig("akka.kafka.consumer")
-  val committerSettings = CommitterSettings(system)
 
   private def parseAccountMessage : AccountMessage => AccountCommand = {
     am =>
@@ -54,19 +45,28 @@ object AccountStream extends App {
       parseAccountMessage(parseBytes(bytes))
   }
 
-  private def mainLogic(): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
+  private def mainLogic(implicit accountRegion:ActorRef, publisher:ActorRef): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
       implicit val askTimeout: Timeout = 5.seconds
 
       val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
       val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
-      val businessLogic: Flow[CommittableMessage[String, Array[Byte]], Any, NotUsed] = Flow[CommittableMessage[String, Array[Byte]]]
-        .wireTap(m => println(s"message received in partition [${m.record.partition()}]"))
-        .map(message => parseKafkaRecord(message.record.value()))
-        .wireTap(m => println(s"message process --> command [$m]"))
-        .mapAsync(1)(command => ask(accountRegion, command))
-        .wireTap(ev => println(s"message process --> event [$ev]"))
+
+      val processFlow: Flow[AccountCommand, AccountEvent, NotUsed] = Flow[AccountCommand].ask[AccountEvent](1)(accountRegion)
+      val publishFlow: Flow[Publish, Published, NotUsed] = Flow[Publish].ask[Published](1)(publisher)
+
+      val businessLogic =
+        Flow[CommittableMessage[String, Array[Byte]]]
+          .wireTap(m => println(s"message received in partition [${m.record.partition()}]"))
+          .map(message => parseKafkaRecord(message.record.value()))
+          .wireTap(m => println(s"message process --> command [$m]"))
+          .via(processFlow)
+          .wireTap(ev => println(s"message processed --> event [$ev]"))
+          .map(ev => Publish(ev))
+          .wireTap(publish => println(s"publish --> [$publish]"))
+          .via(publishFlow)
+          .wireTap(published => println(s"published --> [$published]"))
 
       broadcast ~> businessLogic ~> zip.in0
       broadcast ~> zip.in1
@@ -74,9 +74,33 @@ object AccountStream extends App {
       FlowShape(broadcast.in, zip.out)
   })
 
-  private def partitionedStreamWithCommit = {
+  private def shardRegion(implicit system: ActorSystem): ActorRef = {
+    ClusterSharding(system).start(typeName = "Account",
+      entityProps = Account.props(),
+      settings = ClusterShardingSettings(system),
+      extractEntityId = Account.extractEntityId,
+      extractShardId = Account.extractShardId)
+  }
 
-      val partitions = 5
+  private def kafkaConsumerConfig(implicit system: ActorSystem): Config = system.settings.config.getConfig("akka.kafka.consumer")
+  private def kafkaCommitterSettings(implicit system: ActorSystem): CommitterSettings = CommitterSettings(system)
+
+  private def publisherActor(implicit system: ActorSystem): ActorRef = {
+    system.actorOf(
+      ClusterSingletonProxy.props(
+        singletonManagerPath = "/user/publisher",
+        settings = ClusterSingletonProxySettings(system)
+      ),
+      name = "proxy"
+    )
+  }
+
+  def partitionedStreamWithCommit(implicit system:ActorSystem): RunnableGraph[DrainingControl[Done]] = {
+      val consumerConfig = kafkaConsumerConfig
+      val committerSettings = kafkaCommitterSettings
+      val accountRegion = shardRegion
+      val publisher = publisherActor
+      val parallelism = 5
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
         .withGroupId("akkaSandboxCommitMultiSource")
@@ -88,17 +112,20 @@ object AccountStream extends App {
 
       val src = Consumer.committablePartitionedSource(consumerSettings, Subscriptions.topics(kafkaTopic))
 
-      src.mapAsyncUnordered(partitions) {
+      src.mapAsyncUnordered(parallelism) {
         case (partition, source) =>
             println(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
-            source.via(mainLogic()).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
+            source.via(mainLogic(accountRegion, publisher)).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
       }.toMat(Sink.ignore)(DrainingControl.apply)
   }
 
-  private def streamWithCommit: RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {
+  def streamWithCommit(implicit system:ActorSystem): RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
-
+      val consumerConfig = kafkaConsumerConfig
+      val committerSettings = kafkaCommitterSettings
+      val accountRegion = shardRegion
+      val publisher = publisherActor
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
         .withGroupId("akkaSandboxCommitSingleSource")
@@ -111,12 +138,15 @@ object AccountStream extends App {
       val src = Consumer.committableSource(consumerSettings, Subscriptions.topics(kafkaTopic))
       val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
 
-        src ~> mainLogic().map(_._2.committableOffset) ~> sink
+        src ~> mainLogic(accountRegion, publisher).map(_._2.committableOffset) ~> sink
 
       ClosedShape
   })
 
-  private def streamNoCommit: RunnableGraph[(Consumer.Control, Future[Done])] = {
+  def streamNoCommit(implicit system:ActorSystem): RunnableGraph[(Consumer.Control, Future[Done])] = {
+
+    val consumerConfig = kafkaConsumerConfig
+    val accountRegion = shardRegion
 
     implicit val askTimeout: Timeout = 5.seconds
 
@@ -137,6 +167,4 @@ object AccountStream extends App {
       .wireTap(m => println(s"message process --> event [$m]"))
       .toMat(Sink.ignore)(Keep.both)
   }
-
-  partitionedStreamWithCommit.run()
 }
