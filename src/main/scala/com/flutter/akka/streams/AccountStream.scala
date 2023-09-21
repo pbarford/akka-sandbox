@@ -3,6 +3,7 @@ package com.flutter.akka.streams
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.cluster.singleton.{ClusterSingletonProxy, ClusterSingletonProxySettings}
+import akka.event.LoggingAdapter
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
@@ -45,28 +46,36 @@ object AccountStream {
       parseAccountMessage(parseBytes(bytes))
   }
 
+  private def processFlow(log:LoggingAdapter, accountRegion:ActorRef): Flow[AccountCommand, AccountEvent, NotUsed] = {
+    implicit val askTimeout: Timeout = 5.seconds
+    Flow[AccountCommand]
+      .wireTap(m => log.info(s"message process --> command [$m]"))
+      .ask[AccountEvent](1)(accountRegion)
+      .wireTap(ev => log.info(s"message processed --> event [$ev]"))
+  }
+
+  private def publishFlow(log:LoggingAdapter, publisher:ActorRef): Flow[AccountEvent, Published, NotUsed] = {
+    implicit val askTimeout: Timeout = 5.seconds
+      Flow[AccountEvent]
+        .map(ev => Publish(ev))
+        .wireTap(publish => log.info(s"publish --> [$publish]"))
+        .ask[Published](1)(publisher)
+        .wireTap(published => log.info(s"published --> [$published]"))
+  }
+
   private def mainLogic(implicit system: ActorSystem, accountRegion:ActorRef, publisher:ActorRef): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
-      implicit val askTimeout: Timeout = 5.seconds
 
       val broadcast = builder.add(Broadcast[CommittableMessage[String, Array[Byte]]](2))
       val zip = builder.add(Zip[Any, CommittableMessage[String, Array[Byte]]])
-
-      val processFlow: Flow[AccountCommand, AccountEvent, NotUsed] = Flow[AccountCommand].ask[AccountEvent](1)(accountRegion)
-      val publishFlow: Flow[Publish, Published, NotUsed] = Flow[Publish].ask[Published](1)(publisher)
 
       val businessLogic =
         Flow[CommittableMessage[String, Array[Byte]]]
           .wireTap(m => system.log.info(s"message received in partition [${m.record.partition()}]"))
           .map(message => parseKafkaRecord(message.record.value()))
-          .wireTap(m => system.log.info(s"message process --> command [$m]"))
-          .via(processFlow)
-          .wireTap(ev => system.log.info(s"message processed --> event [$ev]"))
-          .map(ev => Publish(ev))
-          .wireTap(publish => system.log.info(s"publish --> [$publish]"))
-          .via(publishFlow)
-          .wireTap(published => system.log.info(s"published --> [$published]"))
+          .via(processFlow(system.log, accountRegion))
+          .via(publishFlow(system.log, publisher))
 
       broadcast ~> businessLogic ~> zip.in0
       broadcast ~> zip.in1
