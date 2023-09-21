@@ -49,7 +49,7 @@ object Account {
     * IMPORTANT : The sharding algorithm must be the same on all nodes in a running cluster. It can be changed after stopping all nodes in the cluster.
     */
 
-  val numberOfShards = 20
+  val numberOfShards = 30
 
   val extractShardId: ShardRegion.ExtractShardId = {
     case Deposit(id, _) => (id.hashCode % numberOfShards).toString
