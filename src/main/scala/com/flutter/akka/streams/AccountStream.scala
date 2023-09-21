@@ -91,7 +91,7 @@ object AccountStream {
         singletonManagerPath = "/user/publisher",
         settings = ClusterSingletonProxySettings(system)
       ),
-      name = "proxy"
+      name = "publisherProxy"
     )
   }
 
