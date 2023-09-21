@@ -45,7 +45,7 @@ object AccountStream {
       parseAccountMessage(parseBytes(bytes))
   }
 
-  private def mainLogic(implicit accountRegion:ActorRef, publisher:ActorRef): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
+  private def mainLogic(implicit system: ActorSystem, accountRegion:ActorRef, publisher:ActorRef): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
       implicit val askTimeout: Timeout = 5.seconds
@@ -58,15 +58,15 @@ object AccountStream {
 
       val businessLogic =
         Flow[CommittableMessage[String, Array[Byte]]]
-          .wireTap(m => println(s"message received in partition [${m.record.partition()}]"))
+          .wireTap(m => system.log.info(s"message received in partition [${m.record.partition()}]"))
           .map(message => parseKafkaRecord(message.record.value()))
-          .wireTap(m => println(s"message process --> command [$m]"))
+          .wireTap(m => system.log.info(s"message process --> command [$m]"))
           .via(processFlow)
-          .wireTap(ev => println(s"message processed --> event [$ev]"))
+          .wireTap(ev => system.log.info(s"message processed --> event [$ev]"))
           .map(ev => Publish(ev))
-          .wireTap(publish => println(s"publish --> [$publish]"))
+          .wireTap(publish => system.log.info(s"publish --> [$publish]"))
           .via(publishFlow)
-          .wireTap(published => println(s"published --> [$published]"))
+          .wireTap(published => system.log.info(s"published --> [$published]"))
 
       broadcast ~> businessLogic ~> zip.in0
       broadcast ~> zip.in1
@@ -114,8 +114,8 @@ object AccountStream {
 
       src.mapAsyncUnordered(parallelism) {
         case (partition, source) =>
-            println(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
-            source.via(mainLogic(accountRegion, publisher)).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
+            system.log.info(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
+            source.via(mainLogic(system, accountRegion, publisher)).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
       }.toMat(Sink.ignore)(DrainingControl.apply)
   }
 
@@ -138,7 +138,7 @@ object AccountStream {
       val src = Consumer.committableSource(consumerSettings, Subscriptions.topics(kafkaTopic))
       val sink: Sink[ConsumerMessage.Committable, NotUsed] = Committer.flow(committerSettings).to(Sink.ignore)
 
-        src ~> mainLogic(accountRegion, publisher).map(_._2.committableOffset) ~> sink
+        src ~> mainLogic(system, accountRegion, publisher).map(_._2.committableOffset) ~> sink
 
       ClosedShape
   })
@@ -160,11 +160,11 @@ object AccountStream {
       .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
     Consumer.plainSource(consumerSettings, Subscriptions.topics(kafkaTopic))
-      .wireTap(m => println(s"message received in partition [${m.partition()}]"))
+      .wireTap(m => system.log.info(s"message received in partition [${m.partition()}]"))
       .map(m => parseKafkaRecord(m.value()))
-      .wireTap(m => println(s"message process --> command [$m]"))
+      .wireTap(m => system.log.info(s"message process --> command [$m]"))
       .ask[AccountEvent](parallelism = 1)(accountRegion)
-      .wireTap(m => println(s"message process --> event [$m]"))
+      .wireTap(m => system.log.info(s"message process --> event [$m]"))
       .toMat(Sink.ignore)(Keep.both)
   }
 }
