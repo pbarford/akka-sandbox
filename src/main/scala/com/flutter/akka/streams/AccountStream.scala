@@ -48,7 +48,6 @@ object AccountStream {
 
   private def translateFlow(log: LoggingAdapter): Flow[CommittableMessage[String, Array[Byte]], AccountCommand, NotUsed] = {
     Flow[CommittableMessage[String, Array[Byte]]]
-      .wireTap(m => log.info(s"message received in partition [${m.record.partition()}]"))
       .map(message => parseKafkaRecord(message.record.value()))
   }
 
@@ -69,6 +68,9 @@ object AccountStream {
         .wireTap(published => log.info(s"published --> [$published]"))
   }
 
+  private def monitorFlow(log:LoggingAdapter): Flow[CommittableMessage[String, Array[Byte]], CommittableMessage[String, Array[Byte]], NotUsed] =
+    Flow[CommittableMessage[String, Array[Byte]]].wireTap(m => log.info(s"incoming message :: partition [${m.record.partition()}] offset [${m.committableOffset.partitionOffset.offset}]"))
+
   private def mainLogic(implicit system: ActorSystem, accountRegion:ActorRef, publisher:ActorRef): Flow[CommittableMessage[String, Array[Byte]], (Any, CommittableMessage[String, Array[Byte]]), NotUsed] = Flow.fromGraph(GraphDSL.create() {
     implicit builder: GraphDSL.Builder[NotUsed] =>
       import GraphDSL.Implicits._
@@ -83,7 +85,7 @@ object AccountStream {
           .via(publishFlow(system.log, publisher))
 
       broadcast ~> businessLogic ~> zip.in0
-      broadcast ~> zip.in1
+      broadcast ~> monitorFlow(system.log) ~> zip.in1
 
       FlowShape(broadcast.in, zip.out)
   })
