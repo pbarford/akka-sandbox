@@ -21,7 +21,7 @@ object Account {
     def timestamp:Long
   }
 
-  case class AccountCredited(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
+  case class AccountCredited(accountNo: String, timestamp: Long, amount: Double, balance: Double) extends AccountEvent
   case class AccountDebited(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
   case class WithdrawalDeclined(accountNo: String, timestamp: Long, amount: Double) extends AccountEvent
   case class AccountBalance(accountNo: String, timestamp: Long, totalBalance: Double, transactions:List[AccountEvent]) extends AccountEvent
@@ -71,7 +71,7 @@ class Account() extends PersistentActor with ActorLogging {
   private var state: AccountState = AccountState(accountNo)
 
   private def applyCommand: AccountCommand => AccountEvent = {
-    case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount)
+    case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount, balance = state.balance + amount)
     case GetBalance(_) => AccountBalance(accountNo, System.currentTimeMillis(), state.balance, state.transactions)
     case Withdraw(_, amount) if amount > state.balance => WithdrawalDeclined(accountNo, System.currentTimeMillis(), amount)
     case Withdraw(_, amount) if amount <= state.balance => AccountDebited(accountNo, System.currentTimeMillis(), amount)
@@ -96,7 +96,9 @@ class Account() extends PersistentActor with ActorLogging {
   }
 
   override def receiveCommand: Receive = {
-    case cmd: AccountCommand => applyCommand.andThen(persistAndReply(sender()))(cmd)
+    case cmd: AccountCommand =>
+      log.info(s"Actor::Account --> AccountCommand received [$cmd]")
+      applyCommand.andThen(persistAndReply(sender()))(cmd)
   }
   
   override def persistenceId: String = s"classic-acc-$accountNo"

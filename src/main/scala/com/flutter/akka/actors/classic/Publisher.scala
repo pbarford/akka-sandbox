@@ -14,7 +14,7 @@ class Publisher extends Actor with ActorLogging {
 
   override def receive: Receive = {
     case publish:Publish =>
-      log.info(s"publishing: ${publish.event}")
+      log.info(s"Actor::Publisher --> publishing [${publish.event}]")
       sender() ! Published(publish.event)
     case PoisonPill => log.info(s"Publisher stopping")
   }
