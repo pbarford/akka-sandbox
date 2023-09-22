@@ -46,7 +46,7 @@ object AccountStream {
       parseAccountMessage(parseBytes(bytes))
   }
 
-  private def translateFlow(log: LoggingAdapter): Flow[CommittableMessage[String, Array[Byte]], AccountCommand, NotUsed] = {
+  private def translateFlow: Flow[CommittableMessage[String, Array[Byte]], AccountCommand, NotUsed] = {
     Flow[CommittableMessage[String, Array[Byte]]]
       .map(message => parseKafkaRecord(message.record.value()))
   }
@@ -80,7 +80,7 @@ object AccountStream {
 
       val businessLogic =
         Flow[CommittableMessage[String, Array[Byte]]]
-          .via(translateFlow(system.log))
+          .via(translateFlow)
           .via(processFlow(system.log, accountRegion))
           .via(publishFlow(system.log, publisher))
 
