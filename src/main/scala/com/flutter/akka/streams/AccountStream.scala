@@ -46,6 +46,12 @@ object AccountStream {
       parseAccountMessage(parseBytes(bytes))
   }
 
+  private def translateFlow(log: LoggingAdapter): Flow[CommittableMessage[String, Array[Byte]], AccountCommand, NotUsed] = {
+    Flow[CommittableMessage[String, Array[Byte]]]
+      .wireTap(m => log.info(s"message received in partition [${m.record.partition()}]"))
+      .map(message => parseKafkaRecord(message.record.value()))
+  }
+
   private def processFlow(log:LoggingAdapter, accountRegion:ActorRef): Flow[AccountCommand, AccountEvent, NotUsed] = {
     implicit val askTimeout: Timeout = 5.seconds
     Flow[AccountCommand]
@@ -72,8 +78,7 @@ object AccountStream {
 
       val businessLogic =
         Flow[CommittableMessage[String, Array[Byte]]]
-          .wireTap(m => system.log.info(s"message received in partition [${m.record.partition()}]"))
-          .map(message => parseKafkaRecord(message.record.value()))
+          .via(translateFlow(system.log))
           .via(processFlow(system.log, accountRegion))
           .via(publishFlow(system.log, publisher))
 
