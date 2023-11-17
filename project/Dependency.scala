@@ -18,6 +18,7 @@ object Dependency {
     "com.typesafe.akka" %% "akka-persistence-typed" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding-typed" % akkaVersion,
     "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+    "com.typesafe.akka" %% "akka-http" % "10.1.10",
     "com.typesafe.akka" %% "akka-stream-kafka" % "4.0.2",
     "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
@@ -26,6 +27,7 @@ object Dependency {
     "ch.qos.logback" % "logback-classic" % "1.2.3",
     "org.typelevel" %% "cats-core" % "2.1.1",
     "org.typelevel" %% "cats-effect" % "2.1.3",
+    "org.apache.httpcomponents" % "httpclient" % "4.5.14",
     "dev.zio" %% "zio" % "2.0.2"
   )
 }
