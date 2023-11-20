@@ -5,7 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import com.flutter.akka.service.IdService.Id
+import com.flutter.akka.service.EntityIdService.EntityId
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.conn.routing.HttpRoute
 import org.apache.http.impl.client.HttpClients
@@ -16,15 +16,15 @@ import org.apache.http.{HttpEntity, HttpHost}
 import scala.concurrent.{ExecutionContext, Future}
 
 trait IdGenerator {
-  def generate(idType:String)(numberOfIds: Int)(implicit ec:ExecutionContext): Future[List[Id]]
+  def generate(idType:String)(numberOfIds: Int)(implicit ec:ExecutionContext): Future[List[EntityId]]
 }
 
 class RandomGenerator extends IdGenerator {
   private val rand = new scala.util.Random
-  override def generate(idType: String)(numberOfIds: Int)(implicit ec: ExecutionContext): Future[List[Id]] = {
+  override def generate(idType: String)(numberOfIds: Int)(implicit ec: ExecutionContext): Future[List[EntityId]] = {
     Future {
       println(s"RandomGenerator::Thread[${Thread.currentThread().getId}]::generate[$idType][$numberOfIds]")
-      Array.range(0, numberOfIds).map(_ => Id(rand.nextInt(), idType)).toList
+      Array.range(0, numberOfIds).map(_ => EntityId(rand.nextInt(), idType)).toList
     }
   }
 }
@@ -36,14 +36,14 @@ class AkkaHttpGenerator(implicit system: ActorSystem) extends IdGenerator {
     Get(s"https://www.random.org/integers/?num=$numberOfIds&min=1&max=30000&col=1&base=10&format=plain&rnd=new")
   }
 
-  override def generate(idType: String)(numberOfIds: Int)(implicit ec: ExecutionContext): Future[List[Id]] = {
+  override def generate(idType: String)(numberOfIds: Int)(implicit ec: ExecutionContext): Future[List[EntityId]] = {
     println(s"AkkaHttpGenerator::Thread[${Thread.currentThread().getId}]::generate[$idType][$numberOfIds]")
     client.singleRequest(httpRequest(numberOfIds)).flatMap {
       response =>
         if (response.status == StatusCodes.OK) {
-          Unmarshal(response.entity).to[String].map(s => s.split('\n').map(s => Id(s.toInt, idType)).toList)
+          Unmarshal(response.entity).to[String].map(s => s.split('\n').map(s => EntityId(s.toInt, idType)).toList)
         } else {
-          Future(List.empty[Id])
+          Future(List.empty[EntityId])
         }
     }
   }
@@ -56,7 +56,7 @@ class ApacheHttpGenerator extends IdGenerator {
   private val host: HttpHost = new HttpHost("www.random.org", 443)
   connManager.setMaxPerRoute(new HttpRoute(host), 50)
 
-  override def generate(idType: String)(numberOfIds: Int)(implicit ec:ExecutionContext): Future[List[Id]] = {
+  override def generate(idType: String)(numberOfIds: Int)(implicit ec:ExecutionContext): Future[List[EntityId]] = {
 
     Future {
       println(s"ApacheHttpGenerator::Thread[${Thread.currentThread().getId}]::generate[$idType][$numberOfIds]")
@@ -67,13 +67,13 @@ class ApacheHttpGenerator extends IdGenerator {
         entity = client.execute(get).getEntity()
         if (entity != null) {
           val result = EntityUtils.toString(entity)
-          result.split('\n').map(s => Id(s.toInt, idType)).toList
+          result.split('\n').map(s => EntityId(s.toInt, idType)).toList
         } else {
-          List.empty[Id]
+          List.empty[EntityId]
         }
       }
       catch {
-        case _: Exception => List.empty[Id]
+        case _: Exception => List.empty[EntityId]
       } finally {
         EntityUtils.consume(entity)
       }
