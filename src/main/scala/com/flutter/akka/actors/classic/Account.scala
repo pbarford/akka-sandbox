@@ -115,7 +115,7 @@ class Account() extends PersistentActor with ActorLogging {
     persist(ev)(applyEventToState.andThen(replyToSender(ref)))
   }
 
-  private def testIds() = {
+  private def testIds(): Unit = {
     val markets: List[Entity] = (1 to 12).map(id => Market(id, s"market-$id")).toList
     val selections: List[Entity] = (1 to 30).map(id => Selection(id, s"selection-$id")).toList
 
@@ -127,10 +127,10 @@ class Account() extends PersistentActor with ActorLogging {
     val mapped = zipEntitiesWithIds(entities, ids)
     Await.ready(mapped, 5 second).value.get match {
       case Success(res) =>
-        println(s"$res")
-        println(res.groupBy(_._2.entityType))
+        log.info(s"$res")
+        log.info(s"${res.groupBy(_._2.entityType)}")
       case Failure(err) =>
-        println(s"ids :: err=${err.getMessage}")
+        log.info(s"ids :: err=${err.getMessage}")
     }
   }
 
