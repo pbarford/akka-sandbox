@@ -10,7 +10,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 object MessagePublishApp extends ZIOAppDefault {
 
-  //val kafkaTopic = "AccountTopic"
+  //val kafkaTopic = "Accou§ntTopic"
   val kafkaTopic = "PartitionedTopic"
 
   private val props = new Properties()

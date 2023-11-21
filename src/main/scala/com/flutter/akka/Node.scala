@@ -20,7 +20,7 @@ trait Node {
 
   private def akkaConfig(port:Int): Config = {
     val nodeConfig = ConfigFactory.parseString(s"akka.remote.artery.canonical.port=$port")
-     nodeConfig.withFallback(ConfigFactory.defaultApplication())
+    nodeConfig.withFallback(ConfigFactory.load("application-test.conf"))
   }
 
 }

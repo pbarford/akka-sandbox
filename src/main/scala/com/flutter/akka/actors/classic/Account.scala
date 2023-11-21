@@ -3,12 +3,17 @@ package com.flutter.akka.actors.classic
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.cluster.sharding.ShardRegion
 import akka.cluster.sharding.ShardRegion.Passivate
-import akka.persistence.typed.state.RecoveryCompleted
 import akka.persistence._
+import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account._
+import com.flutter.akka.service.EntityIdService.EntityId
+import com.flutter.akka.service.{ApacheHttpGenerator, EntityIdService}
+import com.flutter.akka.{Entity, Market, Selection, zipEntitiesWithIds}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.language.postfixOps
+import scala.util.{Failure, Success}
 object Account {
 
   sealed trait AccountCommand {
@@ -79,6 +84,8 @@ class Account() extends PersistentActor with ActorLogging {
 
   private var state: AccountState = AccountState(accountNo)
 
+  private val apacheHttpGenerator = new ApacheHttpGenerator()
+
   private def applyCommand: AccountCommand => AccountEvent = {
     case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount, balance = state.balance + amount)
     case GetBalance(_) => AccountBalance(accountNo, System.currentTimeMillis(), state.balance, state.transactions)
@@ -108,9 +115,29 @@ class Account() extends PersistentActor with ActorLogging {
     persist(ev)(applyEventToState.andThen(replyToSender(ref)))
   }
 
+  private def testIds() = {
+    val markets: List[Entity] = (1 to 12).map(id => Market(id, s"market-$id")).toList
+    val selections: List[Entity] = (1 to 30).map(id => Selection(id, s"selection-$id")).toList
+
+    import cats.implicits._
+
+    val srv = new EntityIdService(apacheHttpGenerator)
+    val ids: Future[List[EntityId]] = srv.getIds(markets.size, "market") |+| srv.getIds(selections.size, "selection")
+    val entities: List[Entity] = markets |+| selections
+    val mapped = zipEntitiesWithIds(entities, ids)
+    Await.ready(mapped, 5 second).value.get match {
+      case Success(res) =>
+        println(s"$res")
+        println(res.groupBy(_._2.entityType))
+      case Failure(err) =>
+        println(s"ids :: err=${err.getMessage}")
+    }
+  }
+
   override def receiveCommand: Receive = {
     case cmd: AccountCommand =>
       log.info(s"Actor::Account --> AccountCommand received [$cmd]")
+      testIds()
       applyCommand.andThen(persistAndReply(sender()))(cmd)
 
     case SaveSnapshotSuccess(metadata) =>

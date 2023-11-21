@@ -26,6 +26,7 @@ import scala.concurrent.duration._
 object AccountStream {
 
   private val kafkaTopic = "PartitionedTopic"
+  //private val kafkaTopic = "AccountTopic"
   private val kafkaServers = "kafka:9092"
 
   private def parseAccountMessage : AccountMessage => AccountCommand = {
@@ -119,7 +120,7 @@ object AccountStream {
       val parallelism = 5
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
-        .withGroupId("akkaSandboxCommitMultiSource")
+        .withGroupId("akkaSandboxCommitMultiSource2")
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
         .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
