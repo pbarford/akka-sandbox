@@ -7,7 +7,7 @@ import akka.event.LoggingAdapter
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
-import akka.kafka.{CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
+import akka.kafka.{AutoSubscription, CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
 import akka.stream.{ClosedShape, FlowShape}
 import akka.util.Timeout
@@ -112,7 +112,7 @@ object AccountStream {
     )
   }
 
-  def partitionedStreamWithCommit(implicit system:ActorSystem): RunnableGraph[DrainingControl[Done]] = {
+  def partitionedStreamWithCommit(subscription: AutoSubscription)(implicit system:ActorSystem): RunnableGraph[DrainingControl[Done]] = {
       val consumerConfig = kafkaConsumerConfig
       val committerSettings = kafkaCommitterSettings
       val accountRegion = shardRegion
@@ -127,7 +127,7 @@ object AccountStream {
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
         .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
-      val src = Consumer.committablePartitionedSource(consumerSettings, Subscriptions.topics(kafkaTopic))
+      val src = Consumer.committablePartitionedSource(consumerSettings, subscription)
 
       src.mapAsyncUnordered(parallelism) {
         case (partition, source) =>

@@ -1,11 +1,19 @@
 package com.flutter.akka
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Props}
+import akka.kafka.{AutoSubscription, Subscriptions}
+import com.flutter.akka.kafka.RebalanceListener
 import com.flutter.akka.streams.AccountStream
 
 object Node1 extends App with Node {
 
-  private implicit val system: ActorSystem = akkaSystem(2551)
-  AccountStream.partitionedStreamWithCommit.run()
+  private implicit val system: ActorSystem = akkaSystem("AccountStream", 2551, accountSystemSeedNodes)
+
+  val rebalanceListener = system.actorOf(Props(new RebalanceListener))
+  val subscription: AutoSubscription = Subscriptions.topics("PartitionedTopic").withRebalanceListener(rebalanceListener)
+  AccountStream.partitionedStreamWithCommit(subscription).run()
+
+
+
 
 }
