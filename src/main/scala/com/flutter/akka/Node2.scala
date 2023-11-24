@@ -10,7 +10,7 @@ object Node2 extends App with Node {
   private implicit val system: ActorSystem = akkaSystem("AccountStream", 2552, accountSystemSeedNodes)
 
   val rebalanceListener = system.actorOf(Props(new RebalanceListener))
-  val subscription: AutoSubscription = Subscriptions.topics("PartitionedTopic").withRebalanceListener(rebalanceListener)
-  AccountStream.subscriptionStreamWithCommit("AccountStreamConsumerGroup", subscription).run()
+  val subscription: AutoSubscription = Subscriptions.topics(kafkaTopic).withRebalanceListener(rebalanceListener)
+  AccountStream.subscriptionStreamWithCommit(accountConsumerGroupId, subscription).run()
 
 }

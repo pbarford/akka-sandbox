@@ -6,7 +6,9 @@ import com.flutter.akka.actors.classic.Publisher
 import com.typesafe.config.{Config, ConfigFactory}
 
 trait Node {
+  val kafkaTopic = "PartitionedTopic"
 
+  val accountConsumerGroupId = "AccountStreamConsumerGroup"
   val accountSystemSeedNodes = List("akka://AccountStream@127.0.0.1:2551","akka://AccountStream@127.0.0.1:2552","akka://AccountStream@127.0.0.1:2553")
 
   def akkaSystem(name:String, port:Int, seedNodes:List[String]) = {
