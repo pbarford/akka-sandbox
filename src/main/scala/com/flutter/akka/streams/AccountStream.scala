@@ -7,7 +7,7 @@ import akka.event.LoggingAdapter
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Committer, Consumer}
-import akka.kafka.{AutoSubscription, CommitterSettings, ConsumerMessage, ConsumerSettings, Subscriptions}
+import akka.kafka._
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, RunnableGraph, Sink, Zip}
 import akka.stream.{ClosedShape, FlowShape}
 import akka.util.Timeout
@@ -112,7 +112,7 @@ object AccountStream {
     )
   }
 
-  def partitionedStreamWithCommit(subscription: AutoSubscription)(implicit system:ActorSystem): RunnableGraph[DrainingControl[Done]] = {
+  def subscriptionStreamWithCommit(consumerGroupId:String, subscription: Subscription)(implicit system:ActorSystem): RunnableGraph[DrainingControl[Done]] = {
       val consumerConfig = kafkaConsumerConfig
       val committerSettings = kafkaCommitterSettings
       val accountRegion = shardRegion
@@ -120,20 +120,29 @@ object AccountStream {
       val parallelism = 5
       val consumerSettings = ConsumerSettings(consumerConfig, new StringDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(kafkaServers)
-        .withGroupId("akkaSandboxCommitMultiSource2")
+        .withGroupId(consumerGroupId)
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000")
         .withProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
         .withProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "org.apache.kafka.clients.consumer.RoundRobinAssignor")
 
-      val src = Consumer.committablePartitionedSource(consumerSettings, subscription)
 
-      src.mapAsyncUnordered(parallelism) {
-        case (partition, source) =>
-            system.log.info(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
-            source.via(mainLogic(system, accountRegion, publisher)).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
-      }.toMat(Sink.ignore)(DrainingControl.apply)
+      subscription match {
+        case s:AutoSubscription =>
+          val src = Consumer.committablePartitionedSource(consumerSettings, s)
+          src.mapAsyncUnordered(parallelism) {
+            case (partition, source) =>
+              system.log.info(s"Source for [${partition.topic()}] partition [${partition.partition()}]")
+              source.via(mainLogic(system, accountRegion, publisher)).map(_._2.committableOffset).runWith(Committer.sink(committerSettings))
+          }.toMat(Sink.ignore)(DrainingControl.apply)
+        case s:ManualSubscription =>
+          val src = Consumer.committableSource(consumerSettings, s)
+          src.via(mainLogic(system, accountRegion, publisher))
+              .map(_._2.committableOffset)
+              .via(Committer.flow(committerSettings))
+            .toMat(Sink.ignore)(DrainingControl.apply)
+      }
   }
 
   def streamWithCommit(implicit system:ActorSystem): RunnableGraph[NotUsed] = RunnableGraph.fromGraph(GraphDSL.create() {

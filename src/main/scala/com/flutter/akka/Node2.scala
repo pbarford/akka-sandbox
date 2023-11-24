@@ -11,6 +11,6 @@ object Node2 extends App with Node {
 
   val rebalanceListener = system.actorOf(Props(new RebalanceListener))
   val subscription: AutoSubscription = Subscriptions.topics("PartitionedTopic").withRebalanceListener(rebalanceListener)
-  AccountStream.partitionedStreamWithCommit(subscription).run()
+  AccountStream.subscriptionStreamWithCommit("AccountStreamConsumerGroup", subscription).run()
 
 }
