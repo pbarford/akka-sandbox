@@ -6,7 +6,7 @@ import com.flutter.akka.actors.classic.AlertPublisher.Alert
 
 object AlertPublisher {
   case class Alert(message:String)
-  def props = Props(new AlertPublisher())
+  def props: Props = Props(new AlertPublisher())
 }
 
 class AlertPublisher extends Actor {
