@@ -1,11 +1,13 @@
 package com.flutter.akka.actors.classic
 
 import akka.actor.{ActorLogging, ActorRef, Props}
+import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.sharding.ShardRegion
 import akka.cluster.sharding.ShardRegion.Passivate
 import akka.persistence._
 import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account._
+import com.flutter.akka.actors.classic.TopicPublisher.Alert
 import com.flutter.akka.service.EntityIdService.EntityId
 import com.flutter.akka.service.{ApacheHttpGenerator, EntityIdService}
 import com.flutter.akka.{Entity, Market, Selection, zipEntitiesWithIds}
@@ -76,15 +78,21 @@ object Account {
 
 class Account() extends PersistentActor with ActorLogging {
 
+  import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck}
+  private val mediator: ActorRef = DistributedPubSub(context.system).mediator
+  mediator ! Subscribe("alerts", self)
+
   private implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
 
-  context.system.scheduler.scheduleOnce(5.seconds, self, Die)
+  context.system.scheduler.scheduleOnce(60.seconds, self, Die)
 
   private def accountNo: String = self.path.name
 
   private var state: AccountState = AccountState(accountNo)
 
   private val apacheHttpGenerator = new ApacheHttpGenerator()
+
+  println(self.path.toString)
 
   private def applyCommand: AccountCommand => AccountEvent = {
     case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount, balance = state.balance + amount)
@@ -137,7 +145,7 @@ class Account() extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
     case cmd: AccountCommand =>
       log.info(s"Actor::Account --> AccountCommand received [$cmd]")
-      testIds()
+      //testIds()
       applyCommand.andThen(persistAndReply(sender()))(cmd)
 
     case SaveSnapshotSuccess(metadata) =>
@@ -147,6 +155,9 @@ class Account() extends PersistentActor with ActorLogging {
 
     case DeleteSnapshotsSuccess(criteria) => log.info(s"DeleteSnapshotsSuccess to seqNo [${criteria.maxSequenceNr}]")
     case DeleteMessagesSuccess(toSeqNo) => log.info(s"DeleteMessagesSuccess to seqNo [$toSeqNo]")
+
+    case SubscribeAck(Subscribe("alerts", None, `self`)) => log.info("subscribing to alerts")
+    case Alert(msg) => log.info(s"$persistenceId :: ALERT $msg")
 
     case Die =>
       log.info(s"Die received, committing hare kari")
