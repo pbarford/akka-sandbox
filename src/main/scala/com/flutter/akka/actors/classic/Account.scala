@@ -7,7 +7,7 @@ import akka.cluster.sharding.ShardRegion.Passivate
 import akka.persistence._
 import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account._
-import com.flutter.akka.actors.classic.TopicPublisher.Alert
+import com.flutter.akka.actors.classic.AlertPublisher.Alert
 import com.flutter.akka.service.EntityIdService.EntityId
 import com.flutter.akka.service.{ApacheHttpGenerator, EntityIdService}
 import com.flutter.akka.{Entity, Market, Selection, zipEntitiesWithIds}

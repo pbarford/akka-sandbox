@@ -5,7 +5,7 @@ import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerS
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives.{complete, path}
 import akka.http.scaladsl.server.Route
-import com.flutter.akka.actors.classic.{Publisher, TopicPublisher}
+import com.flutter.akka.actors.classic.{Publisher, AlertPublisher}
 import com.typesafe.config.{Config, ConfigFactory}
 
 trait Node {
@@ -25,9 +25,9 @@ trait Node {
         settings = ClusterSingletonManagerSettings(system)),
       name = "publisher")
 
-    val topicPublisher = system.actorOf(TopicPublisher.props)
+    val alertPublisher = system.actorOf(AlertPublisher.props)
     val route: Route = path("alert") {
-      topicPublisher ! "Alert from HTTP"
+      alertPublisher ! "Alert from HTTP"
       complete("OK")
     }
     implicit val ec = system.dispatcher

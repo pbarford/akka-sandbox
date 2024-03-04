@@ -1,18 +1,17 @@
 package com.flutter.akka.actors.classic
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.cluster.pubsub.DistributedPubSub
-import com.flutter.akka.actors.classic.TopicPublisher.Alert
+import com.flutter.akka.actors.classic.AlertPublisher.Alert
 
-object TopicPublisher {
+object AlertPublisher {
   case class Alert(message:String)
-  def props = Props(new TopicPublisher())
+  def props = Props(new AlertPublisher())
 }
 
-class TopicPublisher extends Actor {
+class AlertPublisher extends Actor {
   import akka.cluster.pubsub.DistributedPubSubMediator.Publish
-  // activate the extension
-  val mediator = DistributedPubSub(context.system).mediator
+  private val mediator: ActorRef = DistributedPubSub(context.system).mediator
 
   def receive: Receive = {
     case in: String =>
