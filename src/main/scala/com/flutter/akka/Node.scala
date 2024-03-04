@@ -1,11 +1,14 @@
 package com.flutter.akka
 
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator.Publish
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives.{complete, path}
 import akka.http.scaladsl.server.Route
-import com.flutter.akka.actors.classic.{Publisher, AlertPublisher}
+import com.flutter.akka.actors.classic.Account.Alert
+import com.flutter.akka.actors.classic.Publisher
 import com.typesafe.config.{Config, ConfigFactory}
 
 trait Node {
@@ -25,9 +28,9 @@ trait Node {
         settings = ClusterSingletonManagerSettings(system)),
       name = "publisher")
 
-    val alertPublisher = system.actorOf(AlertPublisher.props)
+    val mediator: ActorRef = DistributedPubSub(system).mediator
     val route: Route = path("alert") {
-      alertPublisher ! "Alert from HTTP"
+      mediator ! Publish("alerts", Alert("Alert from HTTP"))
       complete("OK")
     }
     implicit val ec = system.dispatcher

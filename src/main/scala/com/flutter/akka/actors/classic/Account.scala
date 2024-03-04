@@ -7,7 +7,6 @@ import akka.cluster.sharding.ShardRegion.Passivate
 import akka.persistence._
 import akka.persistence.typed.state.RecoveryCompleted
 import com.flutter.akka.actors.classic.Account._
-import com.flutter.akka.actors.classic.AlertPublisher.Alert
 import com.flutter.akka.service.EntityIdService.EntityId
 import com.flutter.akka.service.{ApacheHttpGenerator, EntityIdService}
 import com.flutter.akka.{Entity, Market, Selection, zipEntitiesWithIds}
@@ -27,6 +26,8 @@ object Account {
   case class Deposit(accountNo: String, amount: Double) extends AccountCommand
   case class Withdraw(accountNo: String, amount: Double) extends AccountCommand
   case class GetBalance(accountNo: String) extends AccountCommand
+
+  case class Alert(msg:String)
 
   sealed trait AccountEvent {
     def accountNo:String
