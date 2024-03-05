@@ -1,7 +1,7 @@
 package com.flutter.akka.actors.classic
 
 import akka.actor.{ActorLogging, ActorRef, Props}
-import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
+import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.sharding.ShardRegion
 import akka.cluster.sharding.ShardRegion.Passivate
 import akka.persistence._
@@ -79,7 +79,7 @@ object Account {
 
 class Account() extends PersistentActor with ActorLogging {
 
-  import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, Unsubscribe, UnsubscribeAck, SubscribeAck}
+  import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck, Unsubscribe, UnsubscribeAck}
   private val mediator: ActorRef = DistributedPubSub(context.system).mediator
   mediator ! Subscribe("alerts", self)
 
