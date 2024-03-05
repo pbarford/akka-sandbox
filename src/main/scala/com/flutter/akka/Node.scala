@@ -36,7 +36,7 @@ trait Node {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val server = Http().newServerAt("localhost", port + 7000).bind(route)
     server.map { _ =>
-      println("Successfully started on localhost:9090 ")
+      println(s"Successfully started on localhost: ${port + 7000}")
     } recover {
       case ex =>
         println("Failed to start the server due to: " + ex.getMessage)
