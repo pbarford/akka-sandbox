@@ -93,8 +93,6 @@ class Account() extends PersistentActor with ActorLogging {
 
   private val apacheHttpGenerator = new ApacheHttpGenerator()
 
-  println(self.path.toString)
-
   private def applyCommand: AccountCommand => AccountEvent = {
     case Deposit(_, amount) => AccountCredited(accountNo = accountNo, timestamp = System.currentTimeMillis(), amount = amount, balance = state.balance + amount)
     case GetBalance(_) => AccountBalance(accountNo, System.currentTimeMillis(), state.balance, state.transactions)
