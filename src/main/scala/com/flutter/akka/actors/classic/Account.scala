@@ -1,7 +1,7 @@
 package com.flutter.akka.actors.classic
 
 import akka.actor.{ActorLogging, ActorRef, Props}
-import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
 import akka.cluster.sharding.ShardRegion
 import akka.cluster.sharding.ShardRegion.Passivate
 import akka.persistence._
@@ -79,7 +79,7 @@ object Account {
 
 class Account() extends PersistentActor with ActorLogging {
 
-  import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck}
+  import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, Unsubscribe, UnsubscribeAck, SubscribeAck}
   private val mediator: ActorRef = DistributedPubSub(context.system).mediator
   mediator ! Subscribe("alerts", self)
 
@@ -157,12 +157,15 @@ class Account() extends PersistentActor with ActorLogging {
     case DeleteSnapshotsSuccess(criteria) => log.info(s"DeleteSnapshotsSuccess to seqNo [${criteria.maxSequenceNr}]")
     case DeleteMessagesSuccess(toSeqNo) => log.info(s"DeleteMessagesSuccess to seqNo [$toSeqNo]")
 
-    case SubscribeAck(Subscribe("alerts", None, `self`)) => log.info("subscribing to alerts")
+    case SubscribeAck(Subscribe("alerts", None, `self`)) => log.info("subscribed to alerts")
+    case UnsubscribeAck(_) =>
+      log.info("unsubscribed from alerts")
+      context.parent ! Passivate(stopMessage = Stop)
     case Alert(msg) => log.info(s"$persistenceId :: ALERT $msg")
 
     case Die =>
       log.info(s"Die received, committing hare kari")
-      context.parent ! Passivate(stopMessage = Stop)
+      mediator ! Unsubscribe("alerts", self)
 
     case Stop =>
       log.info(s"Stop received")
