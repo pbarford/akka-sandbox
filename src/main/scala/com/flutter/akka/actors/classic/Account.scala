@@ -102,7 +102,7 @@ class Account() extends PersistentActor with ActorLogging {
 
   private def applyEventToState: AccountEvent => AccountEvent = { ev =>
     state = state.apply(ev)
-    if(!recoveryRunning && state.seqNo % 3 == 0) saveSnapshot(state)
+    if(!recoveryRunning && state.seqNo % 10 == 0) saveSnapshot(state)
     ev
   }
 
